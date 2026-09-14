@@ -1,0 +1,31 @@
+#include<math.h>
+void setup() {
+  pinMode(34, INPUT);
+  Serial.begin(115200);
+
+}
+
+void loop() {
+  int x = 0; 
+  float y = 0.0;
+  float sum = 0.0;
+  float A = 3.1415*(12.0/1000.0)*(12.0/1000.0);
+    for(int i = 1; i<=10;i++){
+      int x = analogRead(34);
+      float y = 2.0E-11 * x * x * x * x - 7.0E-08 * x * x * x + 7.0E-05 * x * x + 0.0355 * x;
+        if (y <= 0){ y = 0; sum = sum + y; }
+        else{sum = sum+ y;}
+        Serial.print(y);Serial.print("|");
+    delay(10);
+    }
+
+    y = sum/10;
+    float F = (y*9.81*0.001)/(1000.0*A);
+    Serial.print(" === Avg: ");Serial.print(y);Serial.print (" gm");Serial.print(" === Pressure: ");Serial.print(F);Serial.println (" kPa");
+   // Serial.print("----");
+   //Serial.println(x);delay(300);
+    
+  
+  
+
+}
