@@ -1,0 +1,87 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+void setup() {
+  pinMode(34, INPUT); // Pressure sensor pin
+  pinMode(32, INPUT); // Flex sensor pin
+  Serial.begin(115200);
+
+  // Initialize I2C with ESP32 custom pins: SDA = 21, SCL = 22
+  Wire.begin(21, 22);
+
+  // Initialize OLED display (I2C address 0x3C)
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;);
+  }
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 20);
+  display.println(F("Initializing..."));
+  display.display();
+  delay(1000);
+}
+
+void loop() {
+  float pressure_sum = 0.0;
+  float flex_sum = 0.0;
+  float A = 3.1415 * (6.0 / 1000.0) * (6.0 / 1000.0); // Area using 6mm radius (12mm diameter)
+
+  // Take 10 samples for averaging both sensors
+  for(int i = 1; i <= 10; i++) {
+    // --- 1. Pressure Sensor Processing (Pin 34) ---
+    int x_press = analogRead(34);
+    float y_press = 2.0E-11 * x_press * x_press * x_press * x_press - 7.0E-08 * x_press * x_press * x_press + 7.0E-05 * x_press * x_press + 0.0355 * x_press;
+    if (y_press <= 0) { y_press = 0; }
+    pressure_sum += y_press;
+
+    // --- 2. Flex Sensor Processing (Pin 32) ---
+    int x_flex = analogRead(32);
+    float y_flex = 6.0E-09 * x_flex * x_flex * x_flex * x_flex - 1.0E-05 * x_flex * x_flex * x_flex + 0.0057 * x_flex * x_flex - 1.062 * x_flex;
+    if (y_flex <= 0) { y_flex = 0; }
+    flex_sum += y_flex;
+
+    delay(10);
+  }
+
+  // Calculate final averages
+  float avg_y_press = pressure_sum / 10.0;
+  float pressure_kPa = (avg_y_press * 9.81 * 0.001) / (1000.0 * A); // Pressure calculation in kPa
+  float avg_angle = flex_sum / 10.0;
+
+  // Serial Monitor Output
+  Serial.print("Pressure: "); Serial.print(pressure_kPa); Serial.print(" kPa | ");
+  Serial.print("Angle: "); Serial.print(avg_angle); Serial.println(" degree");
+
+  // --- Update OLED Display ---
+  display.clearDisplay();
+
+  // Display Pressure (kPa)
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.print(F("kPa:"));
+  display.setTextSize(2);
+  display.setCursor(0, 10);
+  display.print(pressure_kPa, 2);
+
+  // Display Angle (degree)
+  display.setTextSize(1);
+  display.setCursor(0, 35);
+  display.print(F("Angle:"));
+  display.setTextSize(2);
+  display.setCursor(0, 45);
+  display.print(avg_angle, 1);
+  display.print(F(" d"));
+
+  display.display();
+  
+  delay(100); // Small pause before next reading cycle
+}
