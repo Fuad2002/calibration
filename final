@@ -1,0 +1,108 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+float pressure_kPa = 0.0;
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+bool R_state = true;
+void setup() {
+  pinMode(19,OUTPUT);
+  pinMode(34, INPUT); // Pressure sensor pin
+  pinMode(32, INPUT); // Flex sensor pin
+  pinMode(35, INPUT); // Force sensor 2 pin (Newtons)
+  Serial.begin(115200);
+
+  // Initialize I2C with ESP32 custom pins: SDA = 21, SCL = 22
+  Wire.begin(21, 22);
+
+  // Initialize OLED display (I2C address 0x3C)
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;);
+  }
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 20);
+  display.println(F("Initializing..."));
+  display.display();
+  delay(1000);
+}
+
+void loop() {
+  if(pressure_kPa<=20){digitalWrite(19,HIGH); Serial.print("relay on");}else{digitalWrite(19,LOW);Serial.print("relay off");}
+ 
+  float pressure_sum = 0.0;
+  float flex_sum = 0.0;
+  float force_sum = 0.0;
+  float A = 3.1415 * (6.0 / 1000.0) * (6.0 / 1000.0); // Area using 6mm radius (12mm diameter)
+
+  // Take 10 samples for averaging all three sensors
+  for(int i = 1; i <= 10; i++) {
+    // --- 1. Pressure Sensor Processing (Pin 34) ---
+    int x_press = analogRead(34);
+    float y_press = 2.0E-11 * x_press * x_press * x_press * x_press - 7.0E-08 * x_press * x_press * x_press + 7.0E-05 * x_press * x_press + 0.0355 * x_press;
+    if (y_press <= 0) { y_press = 0; }
+    pressure_sum += y_press;
+
+    // --- 2. Flex Sensor Processing (Pin 32) ---
+    int x_flex = analogRead(32);
+    float y_flex = 6.0E-09 * x_flex * x_flex * x_flex * x_flex - 1.0E-05 * x_flex * x_flex * x_flex + 0.0057 * x_flex * x_flex - 1.062 * x_flex;
+    if (y_flex <= 0) { y_flex = 0; }
+    flex_sum += y_flex;
+
+    // --- 3. Second Force Sensor Processing (Pin 35) ---
+    int x_force = analogRead(35);
+    float y_force = 2.0E-11 * x_force * x_force * x_force * x_force - 7.0E-08 * x_force * x_force * x_force + 7.0E-05 * x_force * x_force + 0.0355 * x_force;
+    if (y_force <= 0) { y_force = 0; }
+    force_sum += y_force;
+
+    delay(10);
+  }
+
+  // Calculate final averages
+  float avg_y_press = pressure_sum / 10.0;
+   pressure_kPa = (avg_y_press * 9.81 * 0.001) / (1000.0 * A); // Pressure in kPa
+  
+  float avg_angle = flex_sum / 10.0;                                // Angle in degrees
+  
+  float avg_y_force = force_sum / 10.0;
+  float force_N = (avg_y_force * 9.81) / 1000.0;                    // Force in Newtons (grams to Newtons)
+
+  // Serial Monitor Output
+  Serial.print("Pressure: "); Serial.print(pressure_kPa); Serial.print(" kPa | ");
+  Serial.print("Angle: "); Serial.print(avg_angle); Serial.print(" degree | ");
+  Serial.print("Force: "); Serial.print(force_N); Serial.println(" N");
+
+  // --- Update OLED Display (3 rows layout) ---
+  display.clearDisplay();
+  display.setTextSize(1);
+
+  // Row 1: Pressure
+  display.setCursor(0, 5);
+  display.print(F("Press: "));
+  display.print(pressure_kPa, 1);
+  display.print(F(" kPa"));
+  
+  // Row 2: Angle
+  display.setCursor(0, 25);
+  display.print(F("Angle: "));
+  display.print(avg_angle, 1);
+  display.print(F(" deg"));
+  
+  // Row 3: Force
+  display.setCursor(0, 45);
+  display.print(F("Force: "));
+  display.print(force_N, 2);
+  display.print(F(" N"));
+
+  display.display();
+  
+  delay(100); // Small pause before next reading cycle
+
+
+  
+}
